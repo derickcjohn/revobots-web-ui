@@ -1,12 +1,11 @@
 from flask import Flask, render_template, request, jsonify
-import subprocess, signal
-import os
-import sys
+import subprocess, os, sys
+from pynput.keyboard import Controller, Key
 
 app = Flask(__name__)
 process = None  # Store the current subprocess globally
 
-# Define default arguments for each mode
+# ---------- Control Defaults ----------
 DEFAULT_ARGS = {
     "record": {
         "robot-path": "lerobot/configs/robot/koch.yaml",
@@ -17,7 +16,8 @@ DEFAULT_ARGS = {
         "warmup-time-s": 5,
         "episode-time-s": 30,
         "reset-time-s": 30,
-        "num-episodes": 2
+        "num-episodes": 2,
+        "push-to-hub": 0
     },
     "record-with-marker": {
         "robot-path": "lerobot/configs/robot/koch.yaml",
@@ -29,7 +29,7 @@ DEFAULT_ARGS = {
         "episode-time-s": 30,
         "reset-time-s": 30,
         "num-episodes": 2,
-
+        "push-to-hub": 0
     },
     "replay": {
         "robot-path": "lerobot/configs/robot/koch.yaml",
@@ -43,7 +43,6 @@ DEFAULT_ARGS = {
     }
 }
 
-# Define which args should be shown to the user per mode
 EDITABLE_KEYS = {
     "record": ["repo-id", "num-episodes"],
     "record-with-marker": ["repo-id", "num-episodes"],
@@ -51,9 +50,28 @@ EDITABLE_KEYS = {
     "teleoperate": []
 }
 
+# ---------- Training Defaults ----------
+TRAIN_DEFAULT_ARGS = {
+    "dataset_repo_id": "koch_test",
+    "policy": "act_koch_real",
+    "env": "koch_real",
+    "hydra.run.dir": "outputs/train/act_koch_test",
+    "hydra.job.name": "act_koch_test",
+    "device": "cuda",
+    "wandb.enable": "false"
+}
+
+TRAIN_EDITABLE_KEYS = ["dataset_repo_id", "device"]
+
+# ---------- Routes ----------
+
 @app.route('/')
-def home():
+def index():
     return render_template('index.html')
+
+@app.route('/train')
+def train():
+    return render_template('train.html')
 
 @app.route('/get_args', methods=['POST'])
 def get_args():
@@ -70,41 +88,35 @@ def run_script():
     mode = data.get("mode")
     user_args = data.get("args", {})
 
-    # Combine user args with default args
     full_args = DEFAULT_ARGS.get(mode, {}).copy()
     full_args.update(user_args)
 
-    # Convert args to command-line format
     script_path = os.path.abspath("lerobot/scripts/control_robot.py")
     cmd = [sys.executable, script_path, mode.replace("-", "_")]
     for key, value in full_args.items():
         cmd.append(f"--{key}")
         cmd.append(str(value))
+
     print("Running command:", " ".join(cmd))
 
-    # Set the PYTHONPATH to the project root so lerobot can be imported
     env = os.environ.copy()
     env["PYTHONPATH"] = os.path.abspath(".") + os.pathsep + env.get("PYTHONPATH", "")
 
-    # Run the command and return output
     try:
         result = subprocess.run(cmd, stdout=subprocess.PIPE, stderr=subprocess.PIPE, env=env, text=True)
         return jsonify({"output": result.stdout, "error": result.stderr})
     except Exception as e:
         return jsonify({"error": str(e)})
-    
+
 @app.route('/send_key', methods=['POST'])
 def send_key():
-    from pynput.keyboard import Controller, Key
     keyboard = Controller()
-    
     key = request.json.get("key")
     key_map = {
         "ArrowLeft": Key.left,
         "ArrowRight": Key.right,
         "Escape": Key.esc
     }
-
     if key in key_map:
         keyboard.press(key_map[key])
         keyboard.release(key_map[key])
@@ -124,6 +136,33 @@ def stop_script():
         return jsonify({"status": "terminated"})
     return jsonify({"status": "no_process"})
 
+@app.route('/get_train_args', methods=['POST'])
+def get_train_args():
+    editable_args = {k: TRAIN_DEFAULT_ARGS[k] for k in TRAIN_EDITABLE_KEYS}
+    return jsonify(editable_args)
 
+@app.route('/run_train', methods=['POST'])
+def run_train():
+    user_args = request.json.get("args", {})
+    full_args = TRAIN_DEFAULT_ARGS.copy()
+    full_args.update(user_args)
+
+    script_path = os.path.abspath("lerobot/scripts/train.py")
+    cmd = [sys.executable, script_path]
+    for key, value in full_args.items():
+        cmd.append(f"{key}={value}")
+
+    print("Running command:", " ".join(cmd))
+
+    env = os.environ.copy()
+    env["PYTHONPATH"] = os.path.abspath(".") + os.pathsep + env.get("PYTHONPATH", "")
+
+    try:
+        result = subprocess.run(" ".join(cmd), capture_output=True, text=True, shell=True, env=env)
+        return jsonify({"output": result.stdout, "error": result.stderr})
+    except Exception as e:
+        return jsonify({"error": str(e)})
+
+# ---------- Main ----------
 if __name__ == '__main__':
     app.run(debug=True)
