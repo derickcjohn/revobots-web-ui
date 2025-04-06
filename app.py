@@ -1,6 +1,7 @@
 from flask import Flask, render_template, request, jsonify
 import subprocess, os, sys
 from pynput.keyboard import Controller, Key
+from datetime import datetime
 
 app = Flask(__name__)
 process = None  # Store the current subprocess globally
@@ -89,6 +90,12 @@ def run_script():
     user_args = data.get("args", {})
 
     full_args = DEFAULT_ARGS.get(mode, {}).copy()
+
+    # Modify repo-id to include datetime if present and editable
+    if "repo-id" in EDITABLE_KEYS.get(mode, []) and "repo-id" in user_args:
+        timestamp = datetime.now().strftime("%Y-%m-%d_%H-%M-%S")
+        user_args["repo-id"] = f"{user_args['repo-id']}_{timestamp}"
+
     full_args.update(user_args)
 
     script_path = os.path.abspath("lerobot/scripts/control_robot.py")
