@@ -148,7 +148,7 @@ def run_train():
     full_args.update(user_args)
 
     script_path = os.path.abspath("lerobot/scripts/train.py")
-    cmd = [sys.executable, script_path]
+    cmd = ["DATA_DIR=data", sys.executable, script_path]
     for key, value in full_args.items():
         cmd.append(f"{key}={value}")
 
