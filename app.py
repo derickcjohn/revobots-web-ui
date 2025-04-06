@@ -147,6 +147,12 @@ def run_train():
     full_args = TRAIN_DEFAULT_ARGS.copy()
     full_args.update(user_args)
 
+    # Dynamically update dependent keys
+    if "dataset_repo_id" in user_args:
+        dataset_name = user_args["dataset_repo_id"]
+        full_args["hydra.run.dir"] = f"outputs/train/act_{dataset_name}"
+        full_args["hydra.job.name"] = f"act_{dataset_name}"
+
     script_path = os.path.abspath("lerobot/scripts/train.py")
     cmd = ["DATA_DIR=data", sys.executable, script_path]
     for key, value in full_args.items():
