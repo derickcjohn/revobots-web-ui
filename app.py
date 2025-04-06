@@ -56,7 +56,7 @@ TRAIN_DEFAULT_ARGS = {
     "dataset_repo_id": "koch_test",
     "policy": "act_koch_real",
     "env": "koch_real",
-    "hydra.run.dir": "outputs/train/act_koch_test",
+    "hydra.run.dir": "demo_outputs/train/act_koch_test",
     "hydra.job.name": "act_koch_test",
     "device": "cuda",
     "wandb.enable": "false"
