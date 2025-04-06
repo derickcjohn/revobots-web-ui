@@ -10,7 +10,7 @@ DEFAULT_ARGS = {
     "record": {
         "robot-path": "lerobot/configs/robot/koch.yaml",
         "fps": 30,
-        "root": "data",
+        "root": "demo_data",
         "repo-id": "koch_test",
         "tags": "tutorial",
         "warmup-time-s": 5,
@@ -22,7 +22,7 @@ DEFAULT_ARGS = {
     "record-with-marker": {
         "robot-path": "lerobot/configs/robot/koch.yaml",
         "fps": 30,
-        "root": "data",
+        "root": "demo_data",
         "repo-id": "koch_test",
         "tags": "marker",
         "warmup-time-s": 5,
@@ -34,7 +34,7 @@ DEFAULT_ARGS = {
     "replay": {
         "robot-path": "lerobot/configs/robot/koch.yaml",
         "fps": 30,
-        "root": "data",
+        "root": "demo_data",
         "repo-id": "koch_test",
         "episode": 0
     },
