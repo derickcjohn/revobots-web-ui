@@ -151,13 +151,15 @@ def get_train_args():
 @app.route('/run_train', methods=['POST'])
 def run_train():
     user_args = request.json.get("args", {})
+    train_type = request.json.get("train_type", "train")  # Default fallback
     full_args = TRAIN_DEFAULT_ARGS.copy()
     full_args.update(user_args)
 
     # Dynamically update dependent keys
     if "dataset_repo_id" in user_args:
         dataset_name = user_args["dataset_repo_id"]
-        full_args["hydra.run.dir"] = f"outputs/train/act_{dataset_name}"
+        # Use selected train_type in the run directory
+        full_args["hydra.run.dir"] = f"outputs/{train_type}/act_{dataset_name}"
         full_args["hydra.job.name"] = f"act_{dataset_name}"
 
     script_path = os.path.abspath("lerobot/scripts/train.py")
