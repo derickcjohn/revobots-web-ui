@@ -118,6 +118,10 @@
             instructionText.innerText = "";
         }
 
+        // Show stop button for teleoperation immediately after run is clicked
+        const stopBtn = document.getElementById("stop-teleop-btn");
+        stopBtn.style.display = currentMode === "teleoperate" ? "block" : "none";
+
         fetch("/run_script", {
             method: "POST",
             headers: { "Content-Type": "application/json" },
@@ -128,8 +132,6 @@
             document.getElementById("run-output").innerText =
                 "Output:\n" + (output.output || "") + "\n\nError:\n" + (output.error || "");
 
-            const stopBtn = document.getElementById("stop-teleop-btn");
-            stopBtn.style.display = currentMode === "teleoperate" ? "block" : "none";
         });
     }
 
