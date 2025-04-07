@@ -25,10 +25,13 @@
 
     <form id="arg-form" class="space-y-4 max-w-xl mx-auto"></form>
     <button id="run-button" style="display:none;" onclick="event.preventDefault(); runScript();" class="w-full mt-4 px-6 py-2 bg-green-600 text-white rounded-xl hover:bg-green-700 transition">Run</button>
-
+    <p id="run-status" class="text-blue-600 font-semibold text-center mt-4 hidden"></p>
+      
     <button id="stop-teleop-btn" style="display:none;" onclick="stopTeleoperation()" class="w-full mt-4 px-6 py-2 bg-red-600 text-white rounded-xl hover:bg-red-700 transition">Stop Teleoperation</button>
 
-    <p id="instruction-text" class="text-center mt-6 text-orange-600 font-semibold"></p>
+    <div class="flex justify-center mt-6">
+    <p id="instruction-text-2" style="text-align: center; margin-top: 15px; font-weight: bold; color: red; font-size: 20pt;"></p>
+    </div>
 
     <div id="key-controls" style="display: none;" class="mt-6 text-center">
       <p class="text-yellow-600 font-semibold mb-2">Manual Controls:</p>
@@ -54,7 +57,6 @@
         currentMode = mode;
         document.getElementById("arg-form").innerHTML = "";
         document.getElementById("run-output").innerText = "";
-        document.getElementById("instruction-text").innerText = "";
         document.getElementById("key-controls").style.display = "none";
 
         const buttons = document.querySelectorAll(".button-group button, .flex button");
@@ -97,26 +99,10 @@
             keyControls.style.display = "none";
         }
 
-        const instructionText = document.getElementById("instruction-text");
-        if (currentMode === "record") {
-            instructionText.innerHTML = `
-                <ul class="list-disc list-inside text-left">
-                    <li>Use RIGHT ARROW to start recording</li>
-                    <li>To redo the episode press LEFT arrow button</li>
-                </ul>
-            `;
-        } else if (currentMode === "record-with-marker") {
-            instructionText.innerHTML = `
-                <ul class="list-disc list-inside text-left">
-                    <li>Double click on camera feed to select target.</li>
-                    <li>Use RIGHT ARROW key to place marker during recording.</li>
-                    <li>Use UP and DOWN arrow button for angle</li>
-                    <li>To redo the episode press LEFT arrow button</li>
-                </ul>
-            `;
-        } else {
-            instructionText.innerText = "";
-        }
+        // Show initial run status
+        const runStatus = document.getElementById("run-status");
+        runStatus.classList.remove("hidden");
+        runStatus.textContent = "🚀 Script is starting...";
 
         // Show stop button for teleoperation immediately after run is clicked
         const stopBtn = document.getElementById("stop-teleop-btn");
@@ -129,8 +115,23 @@
         })
         .then(res => res.json())
         .then(output => {
-            document.getElementById("run-output").innerText =
-                "Output:\n" + (output.output || "") + "\n\nError:\n" + (output.error || "");
+            const runOutput = document.getElementById("run-output");
+
+            // Set status message
+            if (output.status === "started" || output.output || output.error) {
+                runStatus.textContent = "✅ Script is running...";
+            } else {
+                runStatus.textContent = "❌ Failed to start script.";
+            }
+
+            // Display output
+            runOutput.innerText =
+                "Output:\n" + (output.output || "") +
+                "\n\nError:\n" + (output.error || "");
+        })
+        .catch(err => {
+            document.getElementById("run-status").textContent = "❌ Error starting script.";
+            console.error(err);
 
         });
     }
