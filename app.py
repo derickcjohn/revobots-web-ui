@@ -174,7 +174,7 @@ def run_train():
     env["PYTHONPATH"] = os.path.abspath(".") + os.pathsep + env.get("PYTHONPATH", "")
 
     try:
-        result = subprocess.run(" ".join(cmd, stdout=subprocess.PIPE, stderr=subprocess.PIPE, text=True, shell=True, env=env)
+        result = subprocess.run(" ".join(cmd), stdout=subprocess.PIPE, stderr=subprocess.PIPE, text=True, shell=True, env=env)
         return jsonify({"output": result.stdout, "error": result.stderr})
     except Exception as e:
         return jsonify({"error": str(e)})
