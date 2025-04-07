@@ -1,5 +1,5 @@
 from flask import Flask, render_template, request, jsonify
-import subprocess, os, sys
+import subprocess, os, sys, signal
 from pynput.keyboard import Controller, Key
 from datetime import datetime
 
@@ -135,7 +135,7 @@ def send_key():
 def stop_script():
     global process
     if process and process.poll() is None:
-        process.terminate()
+        os.kill(process.pid, signal.SIGINT)
         try:
             process.wait(timeout=5)
         except subprocess.TimeoutExpired:
@@ -163,6 +163,7 @@ def run_train():
         full_args["hydra.job.name"] = f"act_{dataset_name}"
 
     script_path = os.path.abspath("lerobot/scripts/train.py")
+    # cmd = [sys.executable, script_path]
     cmd = ["DATA_DIR=data", sys.executable, script_path]
     for key, value in full_args.items():
         cmd.append(f"{key}={value}")
@@ -173,7 +174,7 @@ def run_train():
     env["PYTHONPATH"] = os.path.abspath(".") + os.pathsep + env.get("PYTHONPATH", "")
 
     try:
-        result = subprocess.run(" ".join(cmd), capture_output=True, text=True, shell=True, env=env)
+        result = subprocess.run(" ".join(cmd, stdout=subprocess.PIPE, stderr=subprocess.PIPE, text=True, shell=True, env=env)
         return jsonify({"output": result.stdout, "error": result.stderr})
     except Exception as e:
         return jsonify({"error": str(e)})
