@@ -27,6 +27,7 @@
     <div class="flex justify-center mt-6">
       <button onclick="runTrain()" class="bg-green-600 text-white px-6 py-2 rounded-xl shadow hover:bg-green-700 transition">Run Training</button>
     </div>
+    <p id="train-status" class="text-blue-600 font-semibold text-center mt-4 hidden"></p>
 
     <div class="mt-8">
       <h2 class="text-lg font-semibold text-gray-700">Training Output</h2>
@@ -58,6 +59,11 @@
       inputs.forEach(input => args[input.name] = input.value);
 
       const selectedType = document.getElementById("trainType").value;
+
+      // Show training status
+      const trainStatus = document.getElementById("train-status");
+      trainStatus.classList.remove("hidden");
+      trainStatus.textContent = "🚀 Training is starting...";
       
       fetch("/run_train", {
         method: "POST",
@@ -66,8 +72,19 @@
       })
       .then(res => res.json())
       .then(output => {
+        trainStatus.textContent = "🏋️ Training has started...";
         document.getElementById("train-output").innerText =
           "Output:\n" + (output.output || "") + "\n\nError:\n" + (output.error || "");
+
+        if (output.error) {
+            trainStatus.textContent = "❌ Training failed!";
+          } else {
+            trainStatus.textContent = "✅ Training complete!";
+          }
+        })
+        .catch(err => {
+          trainStatus.textContent = "❌ Training crashed!";
+          console.error(err);
       });
     }
 
