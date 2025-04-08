@@ -5,17 +5,24 @@ from datetime import datetime
 import time
 import atexit
 
+app = Flask(__name__)
+
+process = None  # control script process
+train_process = None  # training script process
+
 STATUS_FILE = "robot_status.txt"
+
 def set_status(new_status: str):
     with open(STATUS_FILE, "w") as f:
         f.write(new_status)
 
 def get_status() -> str:
     if not os.path.exists(STATUS_FILE):
-        return "unknown"
+        return "idle! sleeping"
     with open(STATUS_FILE, "r") as f:
         status = f.read()
     return status
+
 set_status("")
 
 def cleanup():
@@ -25,25 +32,22 @@ def cleanup():
 
 atexit.register(cleanup)
 
-app = Flask(__name__)
-process = None  # Store the current subprocess globally
-
 # ---------- Control Defaults ----------
 DEFAULT_ARGS = {
     "record": {
-        "robot-path": "lerobot/configs/robot/koch.yaml",
+        "robot-path": "lerobot/configs/robot/revobots.yaml",
         "fps": 30,
         "root": "demo_data",
-        "repo-id": "koch_test",
+        "repo-id": "demo_dataset",
         "tags": "tutorial",
-        "warmup-time-s": 5,
-        "episode-time-s": 30,
-        "reset-time-s": 30,
+        "warmup-time-s": 300,
+        "episode-time-s": 300,
+        "reset-time-s": 1,
         "num-episodes": 2,
         "push-to-hub": 0
     },
     "record-with-marker": {
-        "robot-path": "lerobot/configs/robot/koch.yaml",
+        "robot-path": "lerobot/configs/robot/revobots.yaml",
         "fps": 30,
         "root": "demo_data",
         "repo-id": "koch_test",
@@ -55,14 +59,14 @@ DEFAULT_ARGS = {
         "push-to-hub": 0
     },
     "replay": {
-        "robot-path": "lerobot/configs/robot/koch.yaml",
+        "robot-path": "lerobot/configs/robot/revobots.yaml",
         "fps": 30,
         "root": "demo_data",
         "repo-id": "koch_test",
         "episode": 0
     },
     "teleoperate": {
-        "robot-path": "lerobot/configs/robot/koch.yaml"
+        "robot-path": "lerobot/configs/robot/revobots.yaml"
     }
 }
 
@@ -75,11 +79,11 @@ EDITABLE_KEYS = {
 
 # ---------- Training Defaults ----------
 TRAIN_DEFAULT_ARGS = {
-    "dataset_repo_id": "koch_test",
+    "dataset_repo_id": "demo_dataset",
     "policy": "act_koch_real",
     "env": "koch_real",
-    "hydra.run.dir": "demo_outputs/train/act_koch_test",
-    "hydra.job.name": "act_koch_test",
+    "hydra.run.dir": "demo_outputs/train/act_demo_dataset",
+    "hydra.job.name": "act_demo_dataset",
     "device": "cuda",
     "wandb.enable": "false"
 }
@@ -92,11 +96,14 @@ TRAIN_EDITABLE_KEYS = ["dataset_repo_id", "device"]
 def index():
     return render_template('index.html')
 
+@app.route('/train')
+def train():
+    return render_template('train.html')
+
 @app.route('/list_datasets', methods=['GET'])
 def list_datasets():
-    dataset_dir = "lerobot"  # change this to your actual path
+    dataset_dir = "demo_data"
     try:
-        # Only include directories
         folders = [
             name for name in os.listdir(dataset_dir)
             if os.path.isdir(os.path.join(dataset_dir, name))
@@ -104,10 +111,6 @@ def list_datasets():
         return jsonify({"folders": folders})
     except Exception as e:
         return jsonify({"error": str(e)}), 500
-
-@app.route('/train')
-def train():
-    return render_template('train.html')
 
 @app.route('/get_args', methods=['POST'])
 def get_args():
@@ -126,7 +129,6 @@ def run_script():
 
     full_args = DEFAULT_ARGS.get(mode, {}).copy()
 
-    # Modify repo-id to include datetime if present and editable
     if "repo-id" in EDITABLE_KEYS.get(mode, []) and "repo-id" in user_args:
         timestamp = datetime.now().strftime("%Y-%m-%d_%H-%M-%S")
         user_args["repo-id"] = f"{user_args['repo-id']}_{timestamp}"
@@ -141,16 +143,35 @@ def run_script():
 
     app.config["CURRENT_CMD"] = cmd
 
-    print("Running command:", " ".join(cmd))
-
     env = os.environ.copy()
     env["PYTHONPATH"] = os.path.abspath(".") + os.pathsep + env.get("PYTHONPATH", "")
 
     try:
-        result = subprocess.run(cmd, stdout=subprocess.PIPE, stderr=subprocess.PIPE, env=env, text=True)
-        return jsonify({"output": result.stdout, "error": result.stderr})
+        process = subprocess.Popen(
+            cmd,
+            stdout=subprocess.PIPE,
+            stderr=subprocess.STDOUT,
+            bufsize=1,
+            text=True,
+            env=env
+        )
+        return jsonify({"status": "started"})
     except Exception as e:
         return jsonify({"error": str(e)})
+
+@app.route('/stream_output')
+def stream_output():
+    global process
+    if not process or process.poll() is not None:
+        return "No running process", 400
+
+    def generate():
+        for line in iter(process.stdout.readline, ''):
+            yield f"data: {line.rstrip()}\n\n"
+        process.stdout.close()
+        process.wait()
+
+    return Response(stream_with_context(generate()), mimetype='text/event-stream')
 
 @app.route('/send_key', methods=['POST'])
 def send_key():
@@ -185,31 +206,9 @@ def stream_status():
     def generate():
         while True:
             current_step = get_status()
-
             yield f"data: {current_step}\n\n"
             time.sleep(0.2)
     return Response(generate(), mimetype='text/event-stream')
-
-@app.route('/stream_output')
-def stream_output():
-    cmd = app.config.get("CURRENT_CMD")
-    if not cmd:
-        return "No command to run", 400
-
-    return Response(stream_with_context(generate_output(cmd)), mimetype='text/event-stream')
-
-def generate_output(cmd):
-    process = subprocess.Popen(
-        cmd,
-        stdout=subprocess.PIPE,
-        stderr=subprocess.STDOUT,
-        bufsize=1,
-        text=True
-    )
-    for line in iter(process.stdout.readline, ''):
-        yield f"data: {line.rstrip()}\n\n"
-    process.stdout.close()
-    process.wait()
 
 @app.route('/get_train_args', methods=['POST'])
 def get_train_args():
@@ -218,34 +217,52 @@ def get_train_args():
 
 @app.route('/run_train', methods=['POST'])
 def run_train():
+    global train_process
     user_args = request.json.get("args", {})
-    train_type = request.json.get("train_type", "train")  # Default fallback
+    train_type = request.json.get("train_type", "train")
     full_args = TRAIN_DEFAULT_ARGS.copy()
     full_args.update(user_args)
 
-    # Dynamically update dependent keys
     if "dataset_repo_id" in user_args:
         dataset_name = user_args["dataset_repo_id"]
-        # Use selected train_type in the run directory
         full_args["hydra.run.dir"] = f"outputs/{train_type}/act_{dataset_name}"
         full_args["hydra.job.name"] = f"act_{dataset_name}"
 
     script_path = os.path.abspath("lerobot/scripts/train.py")
-    # cmd = [sys.executable, script_path]
-    cmd = ["DATA_DIR=data", sys.executable, script_path]
+    cmd = ["DATA_DIR=demo_data", sys.executable, script_path]
     for key, value in full_args.items():
         cmd.append(f"{key}={value}")
-
-    print("Running command:", " ".join(cmd))
 
     env = os.environ.copy()
     env["PYTHONPATH"] = os.path.abspath(".") + os.pathsep + env.get("PYTHONPATH", "")
 
     try:
-        result = subprocess.run(" ".join(cmd), stdout=subprocess.PIPE, stderr=subprocess.PIPE, text=True, shell=True, env=env)
-        return jsonify({"output": result.stdout, "error": result.stderr})
+        train_process = subprocess.Popen(
+            " ".join(cmd),
+            stdout=subprocess.PIPE,
+            stderr=subprocess.STDOUT,
+            bufsize=1,
+            text=True,
+            shell=True,
+            env=env
+        )
+        return jsonify({"status": "started"})
     except Exception as e:
         return jsonify({"error": str(e)})
+
+@app.route('/stream_train_output')
+def stream_train_output():
+    global train_process
+    if not train_process or train_process.poll() is not None:
+        return "No training process", 400
+
+    def generate():
+        for line in iter(train_process.stdout.readline, ''):
+            yield f"data: {line.rstrip()}\n\n"
+        train_process.stdout.close()
+        train_process.wait()
+
+    return Response(stream_with_context(generate()), mimetype='text/event-stream')
 
 # ---------- Main ----------
 if __name__ == '__main__':
