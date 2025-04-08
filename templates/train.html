@@ -42,19 +42,57 @@
         .then(data => {
           const form = document.getElementById("train-form");
           form.innerHTML = "";
+
           for (const [key, val] of Object.entries(data)) {
-            form.innerHTML += `
-              <div class="flex flex-col">
-                <label class="text-gray-700 font-medium mb-1" for="${key}">${key}</label>
-                <input class="border border-gray-300 rounded-xl px-3 py-2 focus:outline-none focus:ring-2 focus:ring-blue-400" name="${key}" value="${val}" />
-              </div>
-            `;
+            // For dataset_repo_id, inject a dropdown instead of input
+            if (key === "dataset_repo_id") {
+              form.innerHTML += `
+                <div class="flex flex-col">
+                  <label class="text-gray-700 font-medium mb-1" for="${key}">${key}</label>
+                  <select id="${key}" name="${key}" class="border border-gray-300 rounded-xl px-3 py-2 focus:outline-none focus:ring-2 focus:ring-blue-400">
+                    <option>Loading...</option>
+                  </select>
+                </div>
+              `;
+
+              // Fetch dataset folders from server
+              fetch("/list_datasets")
+                .then(res => res.json())
+                .then(foldersData => {
+                  const dropdown = document.getElementById(key);
+                  dropdown.innerHTML = ""; // Clear old options
+                  if (foldersData.folders) {
+                    foldersData.folders.forEach(folder => {
+                      const option = document.createElement("option");
+                      option.value = folder;
+                      option.textContent = folder;
+                      dropdown.appendChild(option);
+                    });
+                  } else {
+                    dropdown.innerHTML = `<option disabled>No datasets found</option>`;
+                  }
+                })
+                .catch(err => {
+                  console.error("Error loading datasets:", err);
+                  const dropdown = document.getElementById(key);
+                  dropdown.innerHTML = `<option disabled>Error loading datasets</option>`;
+                });
+
+            } else {
+              // Standard input for other keys
+              form.innerHTML += `
+                <div class="flex flex-col">
+                  <label class="text-gray-700 font-medium mb-1" for="${key}">${key}</label>
+                  <input class="border border-gray-300 rounded-xl px-3 py-2 focus:outline-none focus:ring-2 focus:ring-blue-400" name="${key}" value="${val}" />
+                </div>
+              `;
+            }
           }
         });
     }
 
     function runTrain() {
-      const inputs = document.querySelectorAll("#train-form input");
+      const inputs = document.querySelectorAll("#train-form input, #train-form select");
       const args = {};
       inputs.forEach(input => args[input.name] = input.value);
 
