@@ -42,9 +42,8 @@
         .then(data => {
           const form = document.getElementById("train-form");
           form.innerHTML = "";
-
+  
           for (const [key, val] of Object.entries(data)) {
-            // For dataset_repo_id, inject a dropdown instead of input
             if (key === "dataset_repo_id") {
               form.innerHTML += `
                 <div class="flex flex-col">
@@ -54,13 +53,12 @@
                   </select>
                 </div>
               `;
-
-              // Fetch dataset folders from server
+  
               fetch("/list_datasets")
                 .then(res => res.json())
                 .then(foldersData => {
                   const dropdown = document.getElementById(key);
-                  dropdown.innerHTML = ""; // Clear old options
+                  dropdown.innerHTML = "";
                   if (foldersData.folders) {
                     foldersData.folders.forEach(folder => {
                       const option = document.createElement("option");
@@ -77,9 +75,8 @@
                   const dropdown = document.getElementById(key);
                   dropdown.innerHTML = `<option disabled>Error loading datasets</option>`;
                 });
-
+  
             } else {
-              // Standard input for other keys
               form.innerHTML += `
                 <div class="flex flex-col">
                   <label class="text-gray-700 font-medium mb-1" for="${key}">${key}</label>
@@ -90,19 +87,21 @@
           }
         });
     }
-
+  
     function runTrain() {
       const inputs = document.querySelectorAll("#train-form input, #train-form select");
       const args = {};
       inputs.forEach(input => args[input.name] = input.value);
-
+  
       const selectedType = document.getElementById("trainType").value;
-
-      // Show training status
+  
       const trainStatus = document.getElementById("train-status");
+      const trainOutput = document.getElementById("train-output");
+  
       trainStatus.classList.remove("hidden");
       trainStatus.textContent = "🚀 Training is starting...";
-      
+      trainOutput.innerText = "";
+  
       fetch("/run_train", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
@@ -110,23 +109,36 @@
       })
       .then(res => res.json())
       .then(output => {
-        trainStatus.textContent = "🏋️ Training has started...";
-        document.getElementById("train-output").innerText =
-          "Output:\n" + (output.output || "") + "\n\nError:\n" + (output.error || "");
-
-        if (output.error) {
-            trainStatus.textContent = "❌ Training failed!";
-          } else {
-            trainStatus.textContent = "✅ Training complete!";
-          }
-        })
-        .catch(err => {
-          trainStatus.textContent = "❌ Training crashed!";
-          console.error(err);
+        if (output.status === "started") {
+          trainStatus.textContent = "🏋️ Training is running...";
+          streamTrainOutput();
+        } else {
+          trainStatus.textContent = "❌ Failed to start training.";
+          trainOutput.innerText = "Error:\n" + (output.error || "Unknown error");
+        }
+      })
+      .catch(err => {
+        trainStatus.textContent = "❌ Training crashed!";
+        console.error(err);
       });
     }
-
-    // Fetch args on load
+  
+    function streamTrainOutput() {
+      const trainOutput = document.getElementById("train-output");
+      const source = new EventSource("/stream_train_output");
+  
+      source.onmessage = function(event) {
+        trainOutput.innerText += event.data + "\n";
+        trainOutput.scrollTop = trainOutput.scrollHeight;
+      };
+  
+      source.onerror = function(err) {
+        console.error("Stream error", err);
+        source.close();
+      };
+    }
+  
+    // Fetch arguments on page load
     fetchArgs();
   </script>
 </body>
