@@ -26,6 +26,7 @@
     <form id="arg-form" class="space-y-4 max-w-xl mx-auto"></form>
     <button id="run-button" style="display:none;" onclick="event.preventDefault(); runScript();" class="w-full mt-4 px-6 py-2 bg-green-600 text-white rounded-xl hover:bg-green-700 transition">Run</button>
     <p id="run-status" class="text-blue-600 font-semibold text-center mt-4 hidden"></p>
+    <p id="instruction-text" style="text-align: center; margin-top: 15px; font-weight: bold; color: red; font-size: 20pt;"></p>
       
     <button id="stop-teleop-btn" style="display:none;" onclick="stopTeleoperation()" class="w-full mt-4 px-6 py-2 bg-red-600 text-white rounded-xl hover:bg-red-700 transition">Stop Teleoperation</button>
 
@@ -51,6 +52,7 @@
   </div>
 
   <script>
+
     let currentMode = "";
 
     function selectMode(mode) {
@@ -128,7 +130,13 @@
             runOutput.innerText =
                 "Output:\n" + (output.output || "") +
                 "\n\nError:\n" + (output.error || "");
-        })
+        
+        // Start streaming live instructions
+        const eventSource = new EventSource("/stream_status");
+        eventSource.onmessage = function(event) {
+            document.getElementById("instruction-text").innerText = event.data;
+        };
+    })
         .catch(err => {
             document.getElementById("run-status").textContent = "❌ Error starting script.";
             console.error(err);
