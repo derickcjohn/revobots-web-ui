@@ -1,7 +1,29 @@
-from flask import Flask, render_template, request, jsonify
+from flask import Flask, render_template, request, jsonify, Response, stream_with_context
 import subprocess, os, sys, signal
 from pynput.keyboard import Controller, Key
 from datetime import datetime
+import time
+import atexit
+
+STATUS_FILE = "robot_status.txt"
+def set_status(new_status: str):
+    with open(STATUS_FILE, "w") as f:
+        f.write(new_status)
+
+def get_status() -> str:
+    if not os.path.exists(STATUS_FILE):
+        return "unknown"
+    with open(STATUS_FILE, "r") as f:
+        status = f.read()
+    return status
+set_status("")
+
+def cleanup():
+    if os.path.exists(STATUS_FILE):
+        os.remove(STATUS_FILE)
+        print("[Cleanup]")
+
+atexit.register(cleanup)
 
 app = Flask(__name__)
 process = None  # Store the current subprocess globally
@@ -70,6 +92,19 @@ TRAIN_EDITABLE_KEYS = ["dataset_repo_id", "device"]
 def index():
     return render_template('index.html')
 
+@app.route('/list_datasets', methods=['GET'])
+def list_datasets():
+    dataset_dir = "lerobot"  # change this to your actual path
+    try:
+        # Only include directories
+        folders = [
+            name for name in os.listdir(dataset_dir)
+            if os.path.isdir(os.path.join(dataset_dir, name))
+        ]
+        return jsonify({"folders": folders})
+    except Exception as e:
+        return jsonify({"error": str(e)}), 500
+
 @app.route('/train')
 def train():
     return render_template('train.html')
@@ -103,6 +138,8 @@ def run_script():
     for key, value in full_args.items():
         cmd.append(f"--{key}")
         cmd.append(str(value))
+
+    app.config["CURRENT_CMD"] = cmd
 
     print("Running command:", " ".join(cmd))
 
@@ -142,6 +179,37 @@ def stop_script():
             process.kill()
         return jsonify({"status": "terminated"})
     return jsonify({"status": "no_process"})
+
+@app.route('/stream_status')
+def stream_status():
+    def generate():
+        while True:
+            current_step = get_status()
+
+            yield f"data: {current_step}\n\n"
+            time.sleep(0.2)
+    return Response(generate(), mimetype='text/event-stream')
+
+@app.route('/stream_output')
+def stream_output():
+    cmd = app.config.get("CURRENT_CMD")
+    if not cmd:
+        return "No command to run", 400
+
+    return Response(stream_with_context(generate_output(cmd)), mimetype='text/event-stream')
+
+def generate_output(cmd):
+    process = subprocess.Popen(
+        cmd,
+        stdout=subprocess.PIPE,
+        stderr=subprocess.STDOUT,
+        bufsize=1,
+        text=True
+    )
+    for line in iter(process.stdout.readline, ''):
+        yield f"data: {line.rstrip()}\n\n"
+    process.stdout.close()
+    process.wait()
 
 @app.route('/get_train_args', methods=['POST'])
 def get_train_args():
