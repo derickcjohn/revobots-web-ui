@@ -12,6 +12,9 @@ train_process = None  # training script process
 
 STATUS_FILE = "robot_status.txt"
 
+# Edit this path as needed
+MODEL_ROOT = "demo_outputs/train_single"
+
 def set_status(new_status: str):
     with open(STATUS_FILE, "w") as f:
         f.write(new_status)
@@ -99,6 +102,35 @@ def index():
 @app.route('/train')
 def train():
     return render_template('train.html')
+
+@app.route('/inference')
+def inference():
+    folders = []
+    for entry in os.scandir(MODEL_ROOT):
+        if entry.is_dir():
+            mtime = entry.stat().st_mtime
+            folders.append((entry.name, mtime))
+    sorted_folders = [name for name, _ in sorted(folders, key=lambda x: x[1], reverse=True)]
+    return render_template("inference.html", model_folders=sorted_folders)
+
+@app.route("/run_inference", methods=["POST"])
+def run_inference():
+    data = request.get_json()
+    model_name = data.get("model")
+    if not model_name:
+        return jsonify({"error": "No model selected"}), 400
+
+    model_path = os.path.join(MODEL_ROOT, model_name, "checkpoints/last/pretrained_model")
+    print(f"Running inference on model path: {model_path}")
+
+    command = [sys.executable, "api_inference.py", "--model", model_path]
+
+    try:
+        # Example: Run command asynchronously
+        subprocess.Popen(command)
+        return jsonify({"output": f"Inference started for model: {model_name}"})
+    except Exception as e:
+        return jsonify({"error": str(e)}), 500
 
 @app.route('/list_datasets', methods=['GET'])
 def list_datasets():
