@@ -32,7 +32,7 @@ def robot_chat():
 def get_command_override(use_typing):
     return command_queue.get()
 
-def reply_to_web(text):
+def reply_to_web(text, **kwargs):
     response_queue.put(text)
 
 # Override methods for web interface
